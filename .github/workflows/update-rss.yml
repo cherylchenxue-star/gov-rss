@@ -1,0 +1,48 @@
+name: 更新政府政策 RSS
+
+on:
+  schedule:
+    # 每天 06:00、14:00、22:00 UTC (北京时间 14:00、22:00、06:00)
+    - cron: '0 6,14,22 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - run: pip install requests beautifulsoup4 lxml
+
+    - run: python policy_aggregator.py
+      timeout-minutes: 15
+
+    - uses: actions/configure-pages@v4
+
+    - uses: actions/upload-pages-artifact@v3
+      with:
+        path: './public'
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+    - uses: actions/deploy-pages@v4

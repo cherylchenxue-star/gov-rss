@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-政府政策聚合 RSS 生成器
-聚合工信部、科技部、数据局、发改委等多个政策来源
+政府政策聚合 RSS 生成器 - 完整版
+聚合工信部、科技部、数据局、发改委、网信办等多个政策来源
 """
 
 import requests
@@ -64,47 +64,129 @@ def smart_delay(base_delay=2.0):
 
 # ============ 数据源配置 ============
 SOURCES = {
+    # 工信部各司局
     'miit_txs': {
         'name': '工信部信息通信发展司',
         'type': 'html_list',
         'url': 'https://www.miit.gov.cn/jgsj/txs/wjfb/index.html',
-        'base_url': 'https://www.miit.gov.cn',
-        'list_selectors': ['.lmy_main_l3 li', '.lmy_main_tj li', '.clist_con li', '.gy_list li'],
+        'list_selectors': ['.lmy_main_l3 li', '.lmy_main_tj li', 'ul li'],
         'title_selector': 'a',
         'date_selector': 'span',
         'link_attr': 'href',
         'encoding': 'utf-8',
     },
+    'miit_kjs': {
+        'name': '工信部科技司',
+        'type': 'html_list',
+        'url': 'https://www.miit.gov.cn/jgsj/kjs/wjfb/index.html',
+        'list_selectors': ['.lmy_main_l3 li', '.lmy_main_tj li', 'ul li'],
+        'title_selector': 'a',
+        'date_selector': 'span',
+        'link_attr': 'href',
+        'encoding': 'utf-8',
+    },
+    'miit_gxjss': {
+        'name': '工信部高新技术司',
+        'type': 'html_list',
+        'url': 'https://www.miit.gov.cn/gyhxxhb/jgsj/gxjss/wjfb/index.html',
+        'list_selectors': ['.lmy_main_l3 li', '.lmy_main_tj li', 'ul li'],
+        'title_selector': 'a',
+        'date_selector': 'span',
+        'link_attr': 'href',
+        'encoding': 'utf-8',
+    },
+    'miit_waj': {
+        'name': '工信部网络安全管理局',
+        'type': 'html_list',
+        'url': 'https://www.miit.gov.cn/jgsj/waj/wjfb/index.html',
+        'list_selectors': ['.lmy_main_l3 li', '.lmy_main_tj li', 'ul li'],
+        'title_selector': 'a',
+        'date_selector': 'span',
+        'link_attr': 'href',
+        'encoding': 'utf-8',
+    },
+    'miit_xgj': {
+        'name': '工信部信息通信管理局',
+        'type': 'html_list',
+        'url': 'https://www.miit.gov.cn/jgsj/xgj/wjfb/index.html',
+        'list_selectors': ['.lmy_main_l3 li', '.lmy_main_tj li', 'ul li'],
+        'title_selector': 'a',
+        'date_selector': 'span',
+        'link_attr': 'href',
+        'encoding': 'utf-8',
+    },
+    'miit_policy': {
+        'name': '工信部政策文件',
+        'type': 'html_list',
+        'url': 'https://www.miit.gov.cn/zwgk/index.html',
+        'list_selectors': ['.lmy_main_l3 li', '.lmy_main_tj li', 'ul li'],
+        'title_selector': 'a',
+        'date_selector': 'span',
+        'link_attr': 'href',
+        'encoding': 'utf-8',
+    },
+    'miit_sme': {
+        'name': '工信部中小企业促进中心',
+        'type': 'html_list',
+        'url': 'https://www.chinasme.org.cn/html/mcms/daohang/zhengcehuibian/index.html',
+        'list_selectors': ['.list li', '.news-list li', '.content-list li', 'ul li'],
+        'title_selector': 'a',
+        'date_selector': 'span, .date',
+        'link_attr': 'href',
+        'encoding': 'utf-8',
+    },
+    # 科技部
+    'most': {
+        'name': '科技部科技政策',
+        'type': 'html_list',
+        'url': 'https://www.most.gov.cn/satp/',
+        'list_selectors': ['.list_con li', '.news_list li', '.content_list li', '.list-box li', 'ul li'],
+        'title_selector': 'a',
+        'date_selector': 'span',
+        'link_attr': 'href',
+        'encoding': 'utf-8',
+    },
+    # 数据局
     'nda': {
         'name': '国家数据局',
         'type': 'html_list',
         'url': 'https://www.nda.gov.cn/sjj/zwgk/tzgg/list/index_pc_1.html',
-        'base_url': 'https://www.nda.gov.cn',
-        'list_selectors': ['.u-list li', '.list_con li', '.news-list li'],
+        'list_selectors': ['.u-list li', '.list_con li', '.news-list li', 'ul li'],
         'title_selector': 'a',
         'date_selector': 'span',
         'link_attr': 'href',
         'encoding': 'utf-8',
     },
+    # 发改委
     'ndrc': {
         'name': '国家发改委',
         'type': 'html_list',
         'url': 'https://www.ndrc.gov.cn/xxgk/',
-        'base_url': 'https://www.ndrc.gov.cn',
-        'list_selectors': ['.u-list li', '.list_con li', '.news_list li'],
+        'list_selectors': ['.u-list li', '.list_con li', '.news_list li', 'ul li'],
         'title_selector': 'a',
         'date_selector': 'span',
         'link_attr': 'href',
         'encoding': 'utf-8',
     },
+    # 网信办
     'cac': {
         'name': '国家网信办',
         'type': 'html_list',
         'url': 'https://www.cac.gov.cn/wxzw/A0937index_1.htm',
-        'base_url': 'https://www.cac.gov.cn',
-        'list_selectors': ['.news-normal li', '.list_box li', '.news_list li'],
+        'list_selectors': ['.news-normal li', '.list_box li', '.news_list li', 'ul li'],
         'title_selector': 'a',
         'date_selector': 'span',
+        'link_attr': 'href',
+        'encoding': 'utf-8',
+    },
+    # 人工智能学会
+    'caai': {
+        'name': '中国人工智能学会',
+        'type': 'html_list',
+        'url': 'https://www.caai.cn/site/term/14.html',
+        'list_selectors': ['.news_list li', '.list_con li', '.content-list li', 'ul li'],
+        'title_selector': 'a',
+        'date_selector': 'span, .date',
         'link_attr': 'href',
         'encoding': 'utf-8',
     },
@@ -145,12 +227,12 @@ def extract_article_summary(html, max_length=300):
 
         # 优先选择正文区域
         content_selectors = [
-            '.TRS_Editor',           # 政府网站常用
-            '.Custom_UnionStyle',    # 自定义样式
-            '.article-content',      # 文章正文
-            '.content-detail',       # 内容详情
+            '.TRS_Editor',
+            '.Custom_UnionStyle',
+            '.article-content',
+            '.content-detail',
             '#article-content',
-            '.main-content',         # 主内容区
+            '.main-content',
             '.detail-content',
             '.text-content',
             '#content',
@@ -162,19 +244,16 @@ def extract_article_summary(html, max_length=300):
             content_elem = soup.select_one(selector)
             if content_elem:
                 text = content_elem.get_text(separator=' ', strip=True)
-                if len(text) > 100:  # 确保内容足够长
+                if len(text) > 100:
                     break
                 content_elem = None
 
-        # 如果没找到，尝试找 article 标签或最大的 div
         if not content_elem:
             content_elem = soup.find('article') or soup.find('main')
 
-        # 提取文本
         if content_elem:
             content_text = content_elem.get_text(separator=' ', strip=True)
         else:
-            # 备选：从 body 提取，但先移除更多无关元素
             for elem in soup.find_all(['aside', '.sidebar', '.related', '.recommend']):
                 elem.decompose()
             body = soup.find('body')
@@ -196,10 +275,8 @@ def extract_article_summary(html, max_length=300):
         for pattern in nav_patterns:
             content_text = re.sub(pattern, '', content_text)
 
-        # 再次清理空格
         content_text = re.sub(r'\s+', ' ', content_text).strip()
 
-        # 截取摘要
         if len(content_text) > max_length:
             return content_text[:max_length] + '...'
         return content_text
@@ -230,7 +307,11 @@ def parse_html_list(source_key, source_config, session):
                 print(f"[INFO] {source_config['name']}: 使用选择器 {selector}")
                 break
 
-        for li in list_items[:10]:
+        if not list_items:
+            print(f"[WARN] {source_config['name']}: 未找到列表项")
+            return items
+
+        for li in list_items[:8]:  # 限制数量
             try:
                 a_tag = li.select_one(source_config['title_selector'])
                 if not a_tag:
@@ -240,7 +321,7 @@ def parse_html_list(source_key, source_config, session):
                 link = a_tag.get(source_config['link_attr'], '')
 
                 if link and not link.startswith('http'):
-                    link = urljoin(source_config['url'], link)
+                    link = urljoin(url, link)
 
                 date_text = ''
                 date_elem = li.select_one(source_config['date_selector'])
@@ -285,8 +366,7 @@ def parse_date(date_str):
 
     for fmt in formats:
         try:
-            dt = datetime.strptime(date_str, fmt)
-            return dt.isoformat()
+            return datetime.strptime(date_str, fmt).isoformat()
         except:
             continue
 
@@ -341,6 +421,11 @@ def generate_rss(items):
 
 def generate_html(items):
     """生成 HTML 预览页"""
+    source_stats = {}
+    for item in items:
+        src = item['source']
+        source_stats[src] = source_stats.get(src, 0) + 1
+
     html_items = ''
     for item in items[:50]:
         pub_time = item['pub_date'][:10] if len(item['pub_date']) > 10 else item['pub_date']
@@ -355,6 +440,10 @@ def generate_html(items):
         </div>
         """
 
+    stats_html = ''
+    for src, count in sorted(source_stats.items(), key=lambda x: -x[1]):
+        stats_html += f'<div class="stat"><div class="stat-number">{count}</div><div class="stat-label">{src}</div></div>'
+
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -365,6 +454,10 @@ def generate_html(items):
         h1 {{ color: #1a1a1a; text-align: center; }}
         .info {{ background: white; padding: 25px; border-radius: 12px; margin: 20px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.08); text-align: center; }}
         .rss-link {{ background: #1a73e8; color: white; padding: 12px 24px; border-radius: 6px; display: inline-block; margin: 10px; text-decoration: none; font-weight: bold; }}
+        .stats {{ display: flex; justify-content: center; gap: 20px; margin: 20px 0; flex-wrap: wrap; }}
+        .stat {{ text-align: center; padding: 10px; }}
+        .stat-number {{ font-size: 20px; font-weight: bold; color: #1a73e8; }}
+        .stat-label {{ color: #666; font-size: 12px; max-width: 80px; }}
         .item {{ background: white; padding: 16px 20px; border-radius: 8px; margin: 12px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
         .title {{ font-size: 16px; color: #1a1a1a; text-decoration: none; display: block; margin-bottom: 8px; font-weight: 500; }}
         .title:hover {{ color: #1a73e8; }}

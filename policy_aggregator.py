@@ -132,38 +132,74 @@ def fetch_url(url, session=None, encoding=None, source_url=None):
 
 
 def extract_article_summary(html, max_length=300):
-    """提取文章正文摘要"""
+    """提取文章正文摘要，过滤导航等内容"""
     try:
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, 'html.parser')
 
-        for script in soup(["script", "style", "nav", "header", "footer"]):
-            script.decompose()
+        # 移除脚本、样式、导航、页头页脚等无关元素
+        for elem in soup(["script", "style", "nav", "header", "footer",
+                          ".breadcrumb", ".bread", ".nav", ".menu",
+                          ".location", ".position", ".path"]):
+            elem.decompose()
 
+        # 优先选择正文区域
         content_selectors = [
-            '.TRS_Editor',
-            '.Custom_UnionStyle',
-            '.content-detail',
-            '.article-content',
+            '.TRS_Editor',           # 政府网站常用
+            '.Custom_UnionStyle',    # 自定义样式
+            '.article-content',      # 文章正文
+            '.content-detail',       # 内容详情
+            '#article-content',
+            '.main-content',         # 主内容区
+            '.detail-content',
+            '.text-content',
             '#content',
             '.content',
         ]
 
-        content_text = ''
+        content_elem = None
         for selector in content_selectors:
-            elem = soup.select_one(selector)
-            if elem:
-                content_text = elem.get_text(separator=' ', strip=True)
-                if len(content_text) > 100:
+            content_elem = soup.select_one(selector)
+            if content_elem:
+                text = content_elem.get_text(separator=' ', strip=True)
+                if len(text) > 100:  # 确保内容足够长
                     break
+                content_elem = None
 
-        if not content_text:
+        # 如果没找到，尝试找 article 标签或最大的 div
+        if not content_elem:
+            content_elem = soup.find('article') or soup.find('main')
+
+        # 提取文本
+        if content_elem:
+            content_text = content_elem.get_text(separator=' ', strip=True)
+        else:
+            # 备选：从 body 提取，但先移除更多无关元素
+            for elem in soup.find_all(['aside', '.sidebar', '.related', '.recommend']):
+                elem.decompose()
             body = soup.find('body')
-            if body:
-                content_text = body.get_text(separator=' ', strip=True)
+            content_text = body.get_text(separator=' ', strip=True) if body else ''
 
+        # 清理文本
         content_text = re.sub(r'\s+', ' ', content_text).strip()
 
+        # 过滤常见的导航/面包屑文本
+        nav_patterns = [
+            r'设为首页\s*加入收藏\s*',
+            r'手机版\s*繁体\s*搜索\s*',
+            r'首\s*页\s*时政要闻\s*网信政务\s*',
+            r'当前位置[：:]\s*首页\s*[>]\s*正文\s*',
+            r'首页\s*正文\s*',
+            r'来源[：:]\s*.*?\[打印\]\s*\[纠错\]\s*',
+            r'\[打印\]\s*\[纠错\]\s*',
+        ]
+        for pattern in nav_patterns:
+            content_text = re.sub(pattern, '', content_text)
+
+        # 再次清理空格
+        content_text = re.sub(r'\s+', ' ', content_text).strip()
+
+        # 截取摘要
         if len(content_text) > max_length:
             return content_text[:max_length] + '...'
         return content_text

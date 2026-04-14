@@ -93,9 +93,23 @@ SOURCES = {
         'name': '工信部网络安全管理局',
         'url': 'https://www.miit.gov.cn/jgsj/waj/wjfb/index.html',
     },
-    'miit_zwgk': {**MIIT_COMMON,
+    'miit_zwgk': {
         'name': '工信部政策文件',
-        'url': 'https://www.miit.gov.cn/zwgk/zcwj/index.html',
+        'type': 'search_api',
+        'url': 'https://www.miit.gov.cn/search/zcwjk.html',
+        'base_url': 'https://www.miit.gov.cn',
+        'api_url': 'https://www.miit.gov.cn/search-front-server/api/search/info',
+        'api_params': {
+            'websiteid': '110000000000000',
+            'scope': 'basic',
+            'q': '',
+            'pg': '10',
+            'cateid': '196',
+            'pos': 'title_text,infocontent,titlepy',
+            'dateField': 'deploytime',
+            'sortFields': '[{"name":"deploytime","type":"desc"}]',
+            'p': '1',
+        },
     },
     'nda': {
         'name': '国家数据局',
@@ -434,6 +448,65 @@ def parse_html_list(source_key, source_config, session):
     return items
 
 
+def parse_search_api(source_key, source_config, session):
+    """解析工信部搜索 API"""
+    items = []
+    api_url = source_config['api_url']
+    params = source_config.get('api_params', {}).copy()
+    base_url = source_config['base_url']
+
+    try:
+        smart_delay(1.5)
+        resp = session.get(api_url, params=params, headers=get_headers(api_url, source_url=source_config['url']), timeout=30)
+        resp.raise_for_status()
+        data = resp.json(strict=False)
+
+        results = data.get('data', {}).get('searchResult', {}).get('dataResults', [])
+        print(f"[INFO] {source_config['name']}: API 返回 {len(results)} 条")
+
+        for result in results[:source_config.get('max_items', 10)]:
+            item_data = result.get('data', {})
+            title = item_data.get('title', '')
+            link = item_data.get('url', '')
+            pub_time = item_data.get('deploytime', '') or item_data.get('publishtime', '')
+
+            if not title or not link:
+                continue
+
+            if not link.startswith('http'):
+                link = urljoin(base_url, link)
+
+            pub_date = parse_date(pub_time) or parse_date(link)
+
+            item = {
+                'title': title,
+                'link': link,
+                'source': source_config['name'],
+            }
+            if pub_date:
+                item['pub_date'] = pub_date
+
+            # 获取摘要
+            print(f"[INFO] 正在获取正文: {title[:30]}...")
+            smart_delay(1.5)
+            article_html = fetch_url(link, session, source_url=source_config['url'])
+            if article_html:
+                summary = extract_article_summary(article_html)
+                if summary:
+                    item['description'] = f"📄 摘要：{summary}"
+                if not pub_date:
+                    pub_date = extract_date_from_article(article_html)
+                    if pub_date:
+                        item['pub_date'] = pub_date
+
+            items.append(item)
+
+    except Exception as e:
+        print(f"[ERROR] 搜索 API 解析失败 {api_url}: {e}")
+
+    return items
+
+
 def parse_date(date_str):
     """解析各种日期格式"""
     if not date_str:
@@ -573,7 +646,11 @@ def main():
     for source_key, source_config in SOURCES.items():
         try:
             print(f"[INFO] 正在抓取: {source_config['name']}")
-            items = parse_html_list(source_key, source_config, session)
+            source_type = source_config.get('type', 'html_list')
+            if source_type == 'search_api':
+                items = parse_search_api(source_key, source_config, session)
+            else:
+                items = parse_html_list(source_key, source_config, session)
             all_items.extend(items)
             print(f"[OK] {source_config['name']}: 获取 {len(items)} 条")
         except Exception as e:

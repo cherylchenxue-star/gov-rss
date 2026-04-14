@@ -137,16 +137,27 @@ def extract_article_summary(html, max_length=300):
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, 'html.parser')
 
-        for script in soup(["script", "style", "nav", "header", "footer"]):
-            script.decompose()
+        # 移除所有非正文元素（包括用 div 实现的导航）
+        NOISE_TAGS = ["script", "style", "nav", "header", "footer", "noscript"]
+        NOISE_CLASSES = re.compile(
+            r'nav|menu|header|footer|sidebar|breadcrumb|crumb|'
+            r'search|tool|share|关注|收藏|繁体|手机版|设为首页|加入收藏',
+            re.I
+        )
+        for tag in soup.find_all(True):
+            cls = ' '.join(tag.get('class', []))
+            tid = tag.get('id', '')
+            if tag.name in NOISE_TAGS or NOISE_CLASSES.search(cls) or NOISE_CLASSES.search(tid):
+                tag.decompose()
 
+        # 政府网站常见正文容器，按优先级排列
         content_selectors = [
-            '.TRS_Editor',
-            '.Custom_UnionStyle',
-            '.content-detail',
-            '.article-content',
-            '#content',
-            '.content',
+            '.TRS_Editor', '.Custom_UnionStyle',
+            '.content-detail', '.article-content', '.article_con',
+            '.article_content', '.news_content', '.newscontent',
+            '.zwcontent', '.pages_content', '.text_con',
+            '#content', '#article', '#main-content',
+            '.content', '.main',
         ]
 
         content_text = ''
@@ -157,10 +168,11 @@ def extract_article_summary(html, max_length=300):
                 if len(content_text) > 100:
                     break
 
-        if not content_text:
-            body = soup.find('body')
-            if body:
-                content_text = body.get_text(separator=' ', strip=True)
+        # fallback：取字数最多的 <p> 块集合，避免整 body 带入导航噪声
+        if not content_text or len(content_text) < 50:
+            paragraphs = soup.find_all('p')
+            long_paras = [p.get_text(separator=' ', strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 30]
+            content_text = ' '.join(long_paras)
 
         content_text = re.sub(r'\s+', ' ', content_text).strip()
 
@@ -168,7 +180,7 @@ def extract_article_summary(html, max_length=300):
             return content_text[:max_length] + '...'
         return content_text
 
-    except Exception as e:
+    except Exception:
         return ''
 
 

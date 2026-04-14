@@ -437,7 +437,8 @@ def generate_html(items):
     """生成 HTML 预览页"""
     html_items = ''
     for item in items[:50]:
-        pub_time = item['pub_date'][:10] if len(item['pub_date']) > 10 else item['pub_date']
+        pub_date_val = item.get('pub_date', '')
+        pub_time = pub_date_val[:10] if pub_date_val else '日期未知'
         summary = item.get('description', '')
         summary_html = f'<div class="summary">{summary[:150]}...</div>' if summary else ''
 

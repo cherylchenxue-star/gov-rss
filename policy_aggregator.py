@@ -349,10 +349,12 @@ def parse_html_list(source_key, source_config, session):
                 _soup = _BS(html, 'html.parser')
                 _lis = _soup.find_all('li')
                 print(f"[DEBUG] 渲染后共找到 {len(_lis)} 个 li 标签")
-                for _li in _lis[:3]:
-                    _a = _li.select_one('a')
-                    if _a and len(_a.get_text(strip=True)) > 5:
-                        print(f"[DEBUG] li HTML: {str(_li)[:200]}")
+                # 打印前5个 li 的原始 HTML，不过滤
+                for _li in _lis[:5]:
+                    print(f"[DEBUG] li: {str(_li)[:250]}")
+                # 打印所有带 href 的 a 标签前5个
+                for _a in _soup.find_all('a', href=True)[:5]:
+                    print(f"[DEBUG] a: {_a.get_text(strip=True)[:50]} -> {_a['href'][:80]}")
         else:
             smart_delay(2.0)
             html = fetch_url(url, session, source_config.get('encoding'), source_url=url)

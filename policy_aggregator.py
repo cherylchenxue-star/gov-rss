@@ -172,6 +172,80 @@ def extract_article_summary(html, max_length=300):
         return ''
 
 
+def extract_date_from_article(html):
+    """从文章详情页提取真实发布时间，优先级：meta标签 > 正文日期元素 > 全文正则扫描"""
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, 'html.parser')
+
+        # 1. 标准 meta 标签
+        meta_selectors = [
+            ('meta[property="article:published_time"]', 'content'),
+            ('meta[name="pubdate"]', 'content'),
+            ('meta[name="publishdate"]', 'content'),
+            ('meta[name="date"]', 'content'),
+            ('meta[itemprop="datePublished"]', 'content'),
+        ]
+        for selector, attr in meta_selectors:
+            tag = soup.select_one(selector)
+            if tag and tag.get(attr):
+                result = parse_date(tag[attr])
+                if result:
+                    return result
+
+        # 2. 政府网站常见日期容器
+        date_selectors = [
+            '.date', '.time', '.pubdate', '.pub-date', '.publish-date',
+            '.article-date', '.news-date', '.info-date',
+            '[class*="date"]', '[class*="time"]',
+            '.sub', '.source', '.origin',
+        ]
+        for selector in date_selectors:
+            elem = soup.select_one(selector)
+            if elem:
+                result = parse_date(elem.get_text(strip=True))
+                if result:
+                    return result
+
+        # 3. 全文正则扫描（取最早出现的完整日期）
+        text = soup.get_text()
+        matches = re.findall(r'(\d{4}[-/年]\d{1,2}[-/月]\d{1,2})', text)
+        for m in matches:
+            result = parse_date(m)
+            if result:
+                return result
+
+    except Exception:
+        pass
+    return None
+
+
+def extract_date_from_list_item(li, date_selector):
+    """从列表项中提取日期，尝试多个 span 直到找到可解析的日期"""
+    # 1. 先用配置的选择器
+    elem = li.select_one(date_selector)
+    if elem:
+        result = parse_date(elem.get_text(strip=True))
+        if result:
+            return result
+
+    # 2. 遍历所有 span，找第一个能解析为日期的
+    for span in li.find_all('span'):
+        result = parse_date(span.get_text(strip=True))
+        if result:
+            return result
+
+    # 3. 正则扫描整个 li 文本
+    text = li.get_text()
+    match = re.search(r'(\d{4}[-/年]\d{1,2}[-/月]\d{1,2})', text)
+    if match:
+        result = parse_date(match.group(1))
+        if result:
+            return result
+
+    return None
+
+
 def parse_html_list(source_key, source_config, session):
     """HTML 列表解析"""
     items = []
@@ -206,20 +280,17 @@ def parse_html_list(source_key, source_config, session):
                 if link and not link.startswith('http'):
                     link = urljoin(source_config['url'], link)
 
-                date_text = ''
-                date_elem = li.select_one(source_config['date_selector'])
-                if date_elem:
-                    date_text = date_elem.get_text(strip=True)
+                # 先从列表项提取日期
+                pub_date = extract_date_from_list_item(li, source_config['date_selector'])
 
                 if title and link and len(title) > 5:
                     item = {
                         'title': title,
                         'link': link,
-                        'pub_date': parse_date(date_text) or datetime.now().isoformat(),
                         'source': source_config['name'],
                     }
 
-                    # 获取正文摘要
+                    # 获取正文（摘要 + 日期兜底）
                     print(f"[INFO] 正在获取正文: {title[:30]}...")
                     smart_delay(1.5)
                     article_html = fetch_url(link, session, source_url=url)
@@ -227,6 +298,19 @@ def parse_html_list(source_key, source_config, session):
                         summary = extract_article_summary(article_html)
                         if summary:
                             item['description'] = f"📄 摘要：{summary}"
+
+                        # 列表页未能提取日期时，从详情页提取
+                        if not pub_date:
+                            pub_date = extract_date_from_article(article_html)
+                            if pub_date:
+                                print(f"[INFO] 从详情页提取到日期: {pub_date[:10]}")
+
+                    if pub_date:
+                        item['pub_date'] = pub_date
+                    else:
+                        # 真正兜底：标记为未知，避免用爬取时间误导
+                        print(f"[WARN] 无法提取日期，跳过: {title[:30]}")
+                        item['pub_date'] = '1970-01-01T00:00:00'
 
                     items.append(item)
 

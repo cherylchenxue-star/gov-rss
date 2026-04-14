@@ -152,18 +152,20 @@ def fetch_js_page(url, wait_selectors=None, timeout=30000):
                 extra_http_headers={'Referer': 'https://www.baidu.com/'}
             )
             page = ctx.new_page()
-            page.goto(url, timeout=timeout, wait_until='domcontentloaded')
+            page.goto(url, timeout=timeout, wait_until='networkidle')
 
-            # 等待列表内容出现
-            for sel in wait_selectors:
+            # 等待文章列表出现（比导航 li 更具体的选择器）
+            article_selectors = [s for s in wait_selectors if 'main' in s or 'list' in s or 'con' in s]
+            all_selectors = article_selectors + wait_selectors
+            for sel in all_selectors:
                 try:
-                    page.wait_for_selector(sel, timeout=8000)
+                    page.wait_for_selector(sel, timeout=10000)
                     break
                 except Exception:
                     continue
 
-            # 额外等待 JS 渲染完成
-            page.wait_for_timeout(2000)
+            # 额外等待确保 AJAX 数据填充完毕
+            page.wait_for_timeout(3000)
             html = page.content()
             browser.close()
             return html

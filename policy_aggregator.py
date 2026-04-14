@@ -104,7 +104,7 @@ SOURCES = {
         'base_url': 'https://www.cac.gov.cn',
         'list_selectors': ['.news-normal li', '.list_box li', '.news_list li'],
         'title_selector': 'a',
-        'date_selector': 'span',
+        'date_selector': '.times',   # cac.gov.cn 用 <div class="times">
         'link_attr': 'href',
         'encoding': 'utf-8',
     },
@@ -152,27 +152,38 @@ def extract_article_summary(html, max_length=300):
 
         # 政府网站常见正文容器，按优先级排列
         content_selectors = [
-            '.TRS_Editor', '.Custom_UnionStyle',
+            '#BodyLabel',                           # cac.gov.cn
+            '.TRS_Editor', '.Custom_UnionStyle',    # 通用政府 CMS
             '.content-detail', '.article-content', '.article_con',
             '.article_content', '.news_content', '.newscontent',
             '.zwcontent', '.pages_content', '.text_con',
-            '#content', '#article', '#main-content',
-            '.content', '.main',
+            '.main-content', '#content', '#article', '#main-content',
+            '.content',
         ]
 
         content_text = ''
         for selector in content_selectors:
             elem = soup.select_one(selector)
             if elem:
-                content_text = elem.get_text(separator=' ', strip=True)
-                if len(content_text) > 100:
+                t = elem.get_text(separator=' ', strip=True)
+                if len(t) > 100:
+                    content_text = t
                     break
 
-        # fallback：取字数最多的 <p> 块集合，避免整 body 带入导航噪声
+        # fallback：找文字密度最高的 div（子标签少、文字多）
         if not content_text or len(content_text) < 50:
-            paragraphs = soup.find_all('p')
-            long_paras = [p.get_text(separator=' ', strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 30]
-            content_text = ' '.join(long_paras)
+            best_elem, best_score = None, 0
+            for div in soup.find_all(['div', 'td']):
+                text = div.get_text(separator=' ', strip=True)
+                child_tags = len(div.find_all(True))
+                if child_tags == 0:
+                    continue
+                score = len(text) / (child_tags + 1)
+                if score > best_score and len(text) > 80:
+                    best_score = score
+                    best_elem = div
+            if best_elem:
+                content_text = best_elem.get_text(separator=' ', strip=True)
 
         content_text = re.sub(r'\s+', ' ', content_text).strip()
 

@@ -578,7 +578,7 @@ def generate_rss(items):
     <channel>
         <title>政府政策聚合</title>
         <link>https://cherylchenxue-star.github.io/gov-rss/</link>
-        <description>聚合工信部、科技部、数据局、发改委等多个政策来源</description>
+        <description>聚合工信部（5个司局及政策文件）、国家数据局、国家发改委、国家网信办等多个政策来源</description>
         <language>zh-CN</language>
         <lastBuildDate>{datetime.now().strftime('%a, %d %b %Y %H:%M:%S +0800')}</lastBuildDate>
         {items_xml}
@@ -625,13 +625,13 @@ def generate_html(items):
 <body>
     <h1>📋 政府政策聚合 RSS</h1>
     <div class="info">
-        <p>聚合工信部、科技部、数据局、发改委等多个政策来源</p>
+        <p>聚合工信部（5个司局及政策文件）、国家数据局、国家发改委、国家网信办等多个政策来源</p>
         <a href="rss.xml" class="rss-link">📡 RSS 订阅</a>
         <p style="color: #888; font-size: 14px;">当前共 {len(items)} 条政策 · 最后更新: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
     </div>
     <h2>最新政策</h2>
     {html_items}
-    <div class="footer">数据来源: 工信部、科技部、国家数据局、发改委等</div>
+    <div class="footer">数据来源: 工信部、国家数据局、国家发改委、国家网信办等</div>
 </body>
 </html>"""
 

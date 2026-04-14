@@ -134,6 +134,37 @@ SOURCES = {
 }
 
 
+def sniff_list_api(url, timeout=30000):
+    """用 Playwright 拦截 XHR/Fetch 请求，找到返回文章列表的 API URL"""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return None
+
+    api_candidates = []
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-dev-shm-usage'])
+            ctx = browser.new_context(
+                user_agent=random.choice(USER_AGENTS),
+                locale='zh-CN',
+            )
+            page = ctx.new_page()
+
+            def on_request(req):
+                if req.resource_type in ('xhr', 'fetch'):
+                    api_candidates.append(req.url)
+
+            page.on('request', on_request)
+            page.goto(url, timeout=timeout, wait_until='networkidle')
+            page.wait_for_timeout(3000)
+            browser.close()
+    except Exception as e:
+        print(f"[ERROR] API 嗅探失败 {url}: {e}")
+
+    return api_candidates
+
+
 def fetch_js_page(url, wait_selectors=None, timeout=30000):
     """用 Playwright 无头浏览器渲染 JS 页面，返回渲染后的 HTML"""
     try:
@@ -153,18 +184,6 @@ def fetch_js_page(url, wait_selectors=None, timeout=30000):
             )
             page = ctx.new_page()
             page.goto(url, timeout=timeout, wait_until='networkidle')
-
-            # 等待文章列表出现（比导航 li 更具体的选择器）
-            article_selectors = [s for s in wait_selectors if 'main' in s or 'list' in s or 'con' in s]
-            all_selectors = article_selectors + wait_selectors
-            for sel in all_selectors:
-                try:
-                    page.wait_for_selector(sel, timeout=10000)
-                    break
-                except Exception:
-                    continue
-
-            # 额外等待确保 AJAX 数据填充完毕
             page.wait_for_timeout(3000)
             html = page.content()
             browser.close()
@@ -351,12 +370,11 @@ def parse_html_list(source_key, source_config, session):
                 _soup = _BS(html, 'html.parser')
                 _lis = _soup.find_all('li')
                 print(f"[DEBUG] 渲染后共找到 {len(_lis)} 个 li 标签")
-                # 打印前5个 li 的原始 HTML，不过滤
-                for _li in _lis[:5]:
-                    print(f"[DEBUG] li: {str(_li)[:250]}")
-                # 打印所有带 href 的 a 标签前5个
-                for _a in _soup.find_all('a', href=True)[:5]:
-                    print(f"[DEBUG] a: {_a.get_text(strip=True)[:50]} -> {_a['href'][:80]}")
+                # 同时嗅探 XHR 请求
+                apis = sniff_list_api(url)
+                print(f"[DEBUG] 拦截到 XHR/Fetch 请求 {len(apis)} 个:")
+                for _api in apis[:20]:
+                    print(f"[DEBUG] XHR: {_api[:150]}")
         else:
             smart_delay(2.0)
             html = fetch_url(url, session, source_config.get('encoding'), source_url=url)

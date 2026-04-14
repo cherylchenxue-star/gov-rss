@@ -93,9 +93,9 @@ SOURCES = {
         'name': '工信部网络安全管理局',
         'url': 'https://www.miit.gov.cn/jgsj/waj/wjfb/index.html',
     },
-    'miit_xgj': {**MIIT_COMMON,
-        'name': '工信部信息通信管理局',
-        'url': 'https://www.miit.gov.cn/jgsj/xgj/wjfb/index.html',
+    'miit_zwgk': {**MIIT_COMMON,
+        'name': '工信部政策文件',
+        'url': 'https://www.miit.gov.cn/zwgk/zcwj/index.html',
     },
     'nda': {
         'name': '国家数据局',

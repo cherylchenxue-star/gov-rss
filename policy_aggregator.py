@@ -331,12 +331,17 @@ def parse_html_list(source_key, source_config, session):
                             if pub_date:
                                 print(f"[INFO] 从详情页提取到日期: {pub_date[:10]}")
 
+                    # 最后兜底：从 URL 路径提取日期（如 /2026-04/13/ 或 /2026/0413/）
+                    if not pub_date:
+                        pub_date = parse_date(link)
+                        if pub_date:
+                            print(f"[INFO] 从 URL 提取到日期: {pub_date[:10]}")
+                        else:
+                            print(f"[WARN] 无法提取日期: {title[:30]}")
+
                     if pub_date:
                         item['pub_date'] = pub_date
-                    else:
-                        # 真正兜底：标记为未知，避免用爬取时间误导
-                        print(f"[WARN] 无法提取日期，跳过: {title[:30]}")
-                        item['pub_date'] = '1970-01-01T00:00:00'
+                    # 找不到日期时不设 pub_date，generate_rss 会省略 <pubDate> 标签
 
                     items.append(item)
 
@@ -379,22 +384,24 @@ def generate_rss(items):
     items_xml = ''
 
     for item in items:
-        pub_date = item.get('pub_date', datetime.now().isoformat())
-        try:
-            dt = datetime.fromisoformat(pub_date.replace('Z', '+00:00'))
-            pub_date_str = dt.strftime('%a, %d %b %Y %H:%M:%S +0800')
-        except:
-            pub_date_str = datetime.now().strftime('%a, %d %b %Y %H:%M:%S +0800')
+        pub_date_str = ''
+        if 'pub_date' in item:
+            try:
+                dt = datetime.fromisoformat(item['pub_date'].replace('Z', '+00:00'))
+                pub_date_str = dt.strftime('%a, %d %b %Y %H:%M:%S +0800')
+            except:
+                pass
 
         guid = hash(f"{item['title']}{item['link']}") & 0xFFFFFFFF
         desc = item.get('description', f"来源：{item['source']}")
 
+        pub_date_tag = f'<pubDate>{pub_date_str}</pubDate>' if pub_date_str else ''
         items_xml += f"""
         <item>
             <title><![CDATA[{item['title']}]]></title>
             <link>{item['link']}</link>
             <guid isPermaLink="false">{guid}</guid>
-            <pubDate>{pub_date_str}</pubDate>
+            {pub_date_tag}
             <description><![CDATA[{desc}]]></description>
             <category>{item['source']}</category>
         </item>

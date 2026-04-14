@@ -73,6 +73,7 @@ MIIT_COMMON = {
     'link_attr': 'href',
     'encoding': 'utf-8',
     'js_render': True,
+    'max_items': 5,   # 无头浏览器速度慢，每源只取5条控制总时长
 }
 
 SOURCES = {
@@ -356,6 +357,9 @@ def parse_html_list(source_key, source_config, session):
             if list_items:
                 print(f"[INFO] {source_config['name']}: 使用选择器 {selector}")
                 break
+
+        max_items = source_config.get('max_items', 10)
+        list_items = list_items[:max_items]
 
         for li in list_items[:10]:
             try:

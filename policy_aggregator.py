@@ -63,17 +63,38 @@ def smart_delay(base_delay=2.0):
 
 
 # ============ 数据源配置 ============
+MIIT_LIST_SELECTORS = ['.lmy_main_l3 li', '.lmy_main_tj li', '.clist_con li', '.gy_list li', 'ul.list li', '.news_list li']
+MIIT_COMMON = {
+    'type': 'html_list',
+    'base_url': 'https://www.miit.gov.cn',
+    'list_selectors': MIIT_LIST_SELECTORS,
+    'title_selector': 'a',
+    'date_selector': 'span',
+    'link_attr': 'href',
+    'encoding': 'utf-8',
+    'js_render': True,
+}
+
 SOURCES = {
-    'miit_txs': {
+    'miit_txs': {**MIIT_COMMON,
         'name': '工信部信息通信发展司',
-        'type': 'html_list',
         'url': 'https://www.miit.gov.cn/jgsj/txs/wjfb/index.html',
-        'base_url': 'https://www.miit.gov.cn',
-        'list_selectors': ['.lmy_main_l3 li', '.lmy_main_tj li', '.clist_con li', '.gy_list li'],
-        'title_selector': 'a',
-        'date_selector': 'span',
-        'link_attr': 'href',
-        'encoding': 'utf-8',
+    },
+    'miit_kjs': {**MIIT_COMMON,
+        'name': '工信部科技司',
+        'url': 'https://www.miit.gov.cn/jgsj/kjs/wjfb/index.html',
+    },
+    'miit_gxjs': {**MIIT_COMMON,
+        'name': '工信部高新技术司',
+        'url': 'https://www.miit.gov.cn/gyhxxhb/jgsj/gxjss/wjfb/index.html',
+    },
+    'miit_waj': {**MIIT_COMMON,
+        'name': '工信部网络安全管理局',
+        'url': 'https://www.miit.gov.cn/jgsj/waj/wjfb/index.html',
+    },
+    'miit_zwgk': {**MIIT_COMMON,
+        'name': '工信部政策文件',
+        'url': 'https://www.miit.gov.cn/zwgk/zcwj/index.html',
     },
     'nda': {
         'name': '国家数据局',
@@ -109,6 +130,44 @@ SOURCES = {
         'encoding': 'utf-8',
     },
 }
+
+
+def fetch_js_page(url, wait_selectors=None, timeout=30000):
+    """用 Playwright 无头浏览器渲染 JS 页面，返回渲染后的 HTML"""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print(f"[WARN] playwright 未安装，跳过 JS 渲染: {url}")
+        return None
+
+    wait_selectors = wait_selectors or ['li', '.list', '.content']
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-dev-shm-usage'])
+            ctx = browser.new_context(
+                user_agent=random.choice(USER_AGENTS),
+                locale='zh-CN',
+                extra_http_headers={'Referer': 'https://www.baidu.com/'}
+            )
+            page = ctx.new_page()
+            page.goto(url, timeout=timeout, wait_until='domcontentloaded')
+
+            # 等待列表内容出现
+            for sel in wait_selectors:
+                try:
+                    page.wait_for_selector(sel, timeout=8000)
+                    break
+                except Exception:
+                    continue
+
+            # 额外等待 JS 渲染完成
+            page.wait_for_timeout(2000)
+            html = page.content()
+            browser.close()
+            return html
+    except Exception as e:
+        print(f"[ERROR] JS 渲染失败 {url}: {e}")
+        return None
 
 
 def fetch_url(url, session=None, encoding=None, source_url=None):
@@ -280,8 +339,12 @@ def parse_html_list(source_key, source_config, session):
     try:
         from bs4 import BeautifulSoup
 
-        smart_delay(2.0)
-        html = fetch_url(url, session, source_config.get('encoding'), source_url=url)
+        if source_config.get('js_render'):
+            print(f"[INFO] 使用无头浏览器渲染: {url}")
+            html = fetch_js_page(url, wait_selectors=source_config['list_selectors'])
+        else:
+            smart_delay(2.0)
+            html = fetch_url(url, session, source_config.get('encoding'), source_url=url)
         if not html:
             return items
 

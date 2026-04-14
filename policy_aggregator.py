@@ -359,9 +359,10 @@ def parse_date(date_str):
     if not date_str:
         return None
 
-    formats = ['%Y-%m-%d', '%Y/%m/%d', '%Y年%m月%d日']
     date_str = date_str.strip()
 
+    # 固定格式（含点号分隔，如 nda.gov.cn 的 2026.04.10）
+    formats = ['%Y-%m-%d', '%Y/%m/%d', '%Y.%m.%d', '%Y年%m月%d日']
     for fmt in formats:
         try:
             dt = datetime.strptime(date_str, fmt)
@@ -369,10 +370,22 @@ def parse_date(date_str):
         except:
             continue
 
-    match = re.search(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', date_str)
+    # 通用正则：支持 - / . 三种分隔符
+    match = re.search(r'(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})', date_str)
     if match:
         try:
             return datetime(int(match.group(1)), int(match.group(2)), int(match.group(3))).isoformat()
+        except:
+            pass
+
+    # URL 中的紧凑格式，如 20260410
+    match = re.search(r'(\d{4})(\d{2})(\d{2})', date_str)
+    if match:
+        try:
+            dt = datetime(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+            # 合理性校验：年份在 2000-2099 之间
+            if 2000 <= dt.year <= 2099:
+                return dt.isoformat()
         except:
             pass
 
@@ -497,8 +510,24 @@ def main():
             seen_links.add(item['link'])
             unique_items.append(item)
 
+    # 过滤：只保留最近 7 天内的文章（无日期的也保留，避免漏掉有效内容）
+    from datetime import timedelta
+    cutoff = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7)
+    filtered = []
+    for item in unique_items:
+        pub_date = item.get('pub_date')
+        if not pub_date:
+            filtered.append(item)
+            continue
+        try:
+            if datetime.fromisoformat(pub_date) >= cutoff:
+                filtered.append(item)
+        except:
+            filtered.append(item)
+    unique_items = filtered
+
     unique_items.sort(key=lambda x: x.get('pub_date', ''), reverse=True)
-    print(f"[INFO] 去重后共 {len(unique_items)} 条")
+    print(f"[INFO] 去重过滤后共 {len(unique_items)} 条（最近7天）")
 
     # 保存
     os.makedirs('public', exist_ok=True)

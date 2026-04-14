@@ -27,12 +27,10 @@ jobs:
       with:
         python-version: '3.11'
 
-    - run: pip install requests beautifulsoup4 lxml playwright
-
-    - run: playwright install --with-deps chromium
+    - run: pip install requests beautifulsoup4 lxml
 
     - run: python policy_aggregator.py
-      timeout-minutes: 25
+      timeout-minutes: 15
 
     - uses: actions/configure-pages@v4
 

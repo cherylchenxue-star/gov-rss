@@ -63,7 +63,7 @@ def smart_delay(base_delay=2.0):
 
 
 # ============ 数据源配置 ============
-MIIT_LIST_SELECTORS = ['.lmy_main_l3 li', '.lmy_main_tj li', '.clist_con li', '.gy_list li', 'ul.list li', '.news_list li']
+MIIT_LIST_SELECTORS = ['.page-content li', '.lmy_main_l3 li', '.lmy_main_tj li', '.clist_con li', '.gy_list li', 'ul.list li', '.news_list li']
 MIIT_COMMON = {
     'type': 'html_list',
     'base_url': 'https://www.miit.gov.cn',
@@ -72,15 +72,14 @@ MIIT_COMMON = {
     'date_selector': 'span',
     'link_attr': 'href',
     'encoding': 'utf-8',
-    'js_render': True,
-    'max_items': 5,   # 无头浏览器速度慢，每源只取5条控制总时长
+    'build_unit': True,
+    'max_items': 10,
 }
 
 SOURCES = {
     'miit_txs': {**MIIT_COMMON,
         'name': '工信部信息通信发展司',
         'url': 'https://www.miit.gov.cn/jgsj/txs/wjfb/index.html',
-        'debug': True,
     },
     'miit_kjs': {**MIIT_COMMON,
         'name': '工信部科技司',
@@ -134,63 +133,55 @@ SOURCES = {
 }
 
 
-def sniff_list_api(url, timeout=30000):
-    """用 Playwright 拦截 XHR/Fetch 请求，找到返回文章列表的 API URL"""
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
+def fetch_build_unit_html(url, session):
+    """对工信部 build/unit 接口：先请求原始页面提取参数，再请求接口返回列表 HTML"""
+    page_html = fetch_url(url, session, encoding='utf-8', source_url=url)
+    if not page_html:
         return None
 
-    api_candidates = []
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-dev-shm-usage'])
-            ctx = browser.new_context(
-                user_agent=random.choice(USER_AGENTS),
-                locale='zh-CN',
-            )
-            page = ctx.new_page()
+    # 提取 pageId
+    page_id_match = re.search(r'pageId[\'"]?\s*[:=]\s*[\'"]([a-f0-9-]+)[\'"]', page_html)
+    if not page_id_match:
+        print(f"[WARN] 未提取到 pageId: {url}")
+        return None
+    page_id = page_id_match.group(1)
 
-            def on_request(req):
-                if req.resource_type in ('xhr', 'fetch'):
-                    api_candidates.append(req.url)
-
-            page.on('request', on_request)
-            page.goto(url, timeout=timeout, wait_until='networkidle')
-            page.wait_for_timeout(3000)
-            browser.close()
-    except Exception as e:
-        print(f"[ERROR] API 嗅探失败 {url}: {e}")
-
-    return api_candidates
-
-
-def fetch_js_page(url, wait_selectors=None, timeout=30000):
-    """用 Playwright 无头浏览器渲染 JS 页面，返回渲染后的 HTML"""
-    try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        print(f"[WARN] playwright 未安装，跳过 JS 渲染: {url}")
+    # 提取 queryData 中的参数
+    query_match = re.search(r'queryData=[\'"](\{.*?\})[\'"]', page_html)
+    if not query_match:
+        print(f"[WARN] 未提取到 queryData: {url}")
         return None
 
-    wait_selectors = wait_selectors or ['li', '.list', '.content']
+    query_raw = query_match.group(1).replace("'", '"')
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-dev-shm-usage'])
-            ctx = browser.new_context(
-                user_agent=random.choice(USER_AGENTS),
-                locale='zh-CN',
-                extra_http_headers={'Referer': 'https://www.baidu.com/'}
-            )
-            page = ctx.new_page()
-            page.goto(url, timeout=timeout, wait_until='networkidle')
-            page.wait_for_timeout(3000)
-            html = page.content()
-            browser.close()
+        query_data = json.loads(query_raw)
+    except json.JSONDecodeError as e:
+        print(f"[WARN] queryData JSON 解析失败: {e}")
+        return None
+
+    api_url = 'https://www.miit.gov.cn/api-gateway/jpaas-publish-server/front/page/build/unit'
+    params = {
+        'parseType': query_data.get('parseType', 'buildstatic'),
+        'webId': query_data.get('webId'),
+        'tplSetId': query_data.get('tplSetId'),
+        'pageType': query_data.get('pageType', 'column'),
+        'tagId': query_data.get('tagId'),
+        'pageId': page_id,
+    }
+    # 移除 None 值
+    params = {k: v for k, v in params.items() if v is not None}
+
+    try:
+        resp = session.get(api_url, params=params, headers=get_headers(api_url, source_url=url), timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        html = data.get('data', {}).get('html', '')
+        if html:
             return html
+        print(f"[WARN] build/unit 接口无 html: {url}")
     except Exception as e:
-        print(f"[ERROR] JS 渲染失败 {url}: {e}")
-        return None
+        print(f"[ERROR] build/unit 请求失败 {url}: {e}")
+    return None
 
 
 def fetch_url(url, session=None, encoding=None, source_url=None):
@@ -362,19 +353,9 @@ def parse_html_list(source_key, source_config, session):
     try:
         from bs4 import BeautifulSoup
 
-        if source_config.get('js_render'):
-            print(f"[INFO] 使用无头浏览器渲染: {url}")
-            html = fetch_js_page(url, wait_selectors=source_config['list_selectors'])
-            if html and source_config.get('debug'):
-                from bs4 import BeautifulSoup as _BS
-                _soup = _BS(html, 'html.parser')
-                _lis = _soup.find_all('li')
-                print(f"[DEBUG] 渲染后共找到 {len(_lis)} 个 li 标签")
-                # 同时嗅探 XHR 请求
-                apis = sniff_list_api(url)
-                print(f"[DEBUG] 拦截到 XHR/Fetch 请求 {len(apis)} 个:")
-                for _api in apis[:20]:
-                    print(f"[DEBUG] XHR: {_api[:150]}")
+        if source_config.get('build_unit'):
+            print(f"[INFO] 使用 build/unit 接口: {url}")
+            html = fetch_build_unit_html(url, session)
         else:
             smart_delay(2.0)
             html = fetch_url(url, session, source_config.get('encoding'), source_url=url)
@@ -393,7 +374,7 @@ def parse_html_list(source_key, source_config, session):
         max_items = source_config.get('max_items', 10)
         list_items = list_items[:max_items]
 
-        for li in list_items[:10]:
+        for li in list_items[:max_items]:
             try:
                 a_tag = li.select_one(source_config['title_selector'])
                 if not a_tag:

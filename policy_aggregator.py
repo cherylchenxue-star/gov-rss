@@ -80,6 +80,7 @@ SOURCES = {
     'miit_txs': {**MIIT_COMMON,
         'name': '工信部信息通信发展司',
         'url': 'https://www.miit.gov.cn/jgsj/txs/wjfb/index.html',
+        'debug': True,
     },
     'miit_kjs': {**MIIT_COMMON,
         'name': '工信部科技司',
@@ -343,6 +344,15 @@ def parse_html_list(source_key, source_config, session):
         if source_config.get('js_render'):
             print(f"[INFO] 使用无头浏览器渲染: {url}")
             html = fetch_js_page(url, wait_selectors=source_config['list_selectors'])
+            if html and source_config.get('debug'):
+                from bs4 import BeautifulSoup as _BS
+                _soup = _BS(html, 'html.parser')
+                _lis = _soup.find_all('li')
+                print(f"[DEBUG] 渲染后共找到 {len(_lis)} 个 li 标签")
+                for _li in _lis[:3]:
+                    _a = _li.select_one('a')
+                    if _a and len(_a.get_text(strip=True)) > 5:
+                        print(f"[DEBUG] li HTML: {str(_li)[:200]}")
         else:
             smart_delay(2.0)
             html = fetch_url(url, session, source_config.get('encoding'), source_url=url)

@@ -145,6 +145,9 @@ def extract_article_summary(html, max_length=300):
             re.I
         )
         for tag in soup.find_all(True):
+            # 注释节点、ProcessingInstruction 等没有 attrs，跳过
+            if not hasattr(tag, 'attrs') or tag.attrs is None:
+                continue
             cls = ' '.join(tag.get('class', []))
             tid = tag.get('id', '')
             if tag.name in NOISE_TAGS or NOISE_CLASSES.search(cls) or NOISE_CLASSES.search(tid):

@@ -62,6 +62,36 @@ def smart_delay(base_delay=2.0):
     time.sleep(delay)
 
 
+# ============ 智能标签词库 ============
+INDUSTRY_KEYWORDS = {
+    "人工智能": ["人工智能", "大模型", "算力", "算法", "智能计算", "智算中心", "深度学习", "机器学习"],
+    "数字经济": ["数字经济", "数字化转型", "数字中国", "数据要素", "大数据", "云计算", "区块链"],
+    "网络安全": ["网络安全", "数据安全", "信息安全", "关键信息基础设施", "安全审查", "密码技术"],
+    "通信技术": ["5G", "6G", "工业互联网", "物联网", "车联网", "卫星互联网", "通信"],
+    "集成电路": ["集成电路", "芯片", "半导体", "晶圆", "EDA", "光刻"],
+    "新能源汽车": ["新能源汽车", "智能网联汽车", "电动汽车", "动力电池", "氢能", "充电设施"],
+    "企业资质": ["专精特新", "小巨人", "瞪羚", "独角兽", "中小企业", "高新技术企业"],
+    "资金支持": ["专项资金", "补贴", "退税", "产业扶持", "资金", "奖补", "财政支持"],
+    "人才项目": ["人才引进", "高层次人才", "揭榜挂帅", "研发投入", "创新团队", "人才计划"],
+    "绿色低碳": ["碳达峰", "碳中和", "绿色低碳", "节能减排", "循环经济", "清洁生产"],
+    "质量标准": ["质量", "标准", "认证", "检测", "计量", "质量管理"],
+    "对外开放": ["对外开放", "外商投资", "进出口", "一带一路", "自贸区", "国际合作"],
+}
+
+
+def extract_industry_tags(text: str) -> list:
+    """基于关键词匹配提取行业/分类标签"""
+    if not text:
+        return []
+    tags = []
+    for category, keywords in INDUSTRY_KEYWORDS.items():
+        for kw in keywords:
+            if kw in text:
+                tags.append(category)
+                break
+    return tags
+
+
 # ============ 数据源配置 ============
 MIIT_LIST_SELECTORS = ['.page-content li', '.lmy_main_l3 li', '.lmy_main_tj li', '.clist_con li', '.gy_list li', 'ul.list li', '.news_list li']
 MIIT_COMMON = {
@@ -436,7 +466,10 @@ def parse_html_list(source_key, source_config, session):
 
                     if pub_date:
                         item['pub_date'] = pub_date
-                    # 找不到日期时不设 pub_date，generate_rss 会省略 <pubDate> 标签
+
+                    # 智能标签
+                    summary_text = item.get('description', '').replace('📄 摘要：', '')
+                    item['tags'] = extract_industry_tags(f"{title} {summary_text}")
 
                     items.append(item)
 
@@ -501,6 +534,10 @@ def parse_search_api(source_key, source_config, session):
                     if pub_date:
                         item['pub_date'] = pub_date
 
+            # 智能标签
+            summary_text = item.get('description', '').replace('📄 摘要：', '')
+            item['tags'] = extract_industry_tags(f"{title} {summary_text}")
+
             items.append(item)
 
     except Exception as e:
@@ -564,6 +601,8 @@ def generate_rss(items):
         guid = hash(f"{item['title']}{item['link']}") & 0xFFFFFFFF
         summary = item.get('description', '').replace('📄 摘要：', '').strip()
         desc = f"来源: {item['source']}<br/>{summary}" if summary else f"来源: {item['source']}"
+        tags = item.get('tags', [])
+        tags_xml = ''.join([f'\n            <category><![CDATA[{tag}]]></category>' for tag in tags])
 
         pub_date_tag = f'<pubDate>{pub_date_str}</pubDate>' if pub_date_str else ''
         items_xml += f"""
@@ -573,7 +612,7 @@ def generate_rss(items):
             <guid isPermaLink="false">{guid}</guid>
             {pub_date_tag}
             <description><![CDATA[{desc}]]></description>
-            <source>{item['source']}</source>
+            <source>{item['source']}</source>{tags_xml}
         </item>
         """
 
@@ -1064,7 +1103,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           data.policies = policies;
           data.allTags = Array.from(allTags).sort();
           data.meta.totalCount = policies.length;
-          data.meta.updatedAt = new Date().toLocaleString('zh-CN', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(/\//g, '-');
+          data.meta.updatedAt = new Date().toLocaleString('zh-CN', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).split('/').join('-');
 
           state.filters.sources = data.sources.map(s => s.id);
           state.filters.tag = 'all';
@@ -1339,10 +1378,10 @@ def generate_html(items):
             "sourceId": item.get('source_id', ''),
             "source": item['source'],
             "summary": summary,
-            "tags": [],
+            "tags": item.get('tags', []),
         })
 
-    all_tags = []
+    all_tags = sorted(set(tag for item in items for tag in item.get('tags', [])))
 
     policy_data = {
         "meta": {

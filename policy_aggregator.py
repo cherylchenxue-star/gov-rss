@@ -1103,7 +1103,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       function bindEvents() {
         const searchInput = document.getElementById('search-input');
         const searchClear = document.getElementById('search-clear');
-        const sourceBtn = document.getById('source-dropdown-btn');
+        const sourceBtn = document.getElementById('source-dropdown-btn');
         const sourcePanel = document.getElementById('source-dropdown-panel');
         const tagBtn = document.getElementById('tag-dropdown-btn');
         const tagPanel = document.getElementById('tag-dropdown-panel');

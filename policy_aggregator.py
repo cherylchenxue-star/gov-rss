@@ -1037,7 +1037,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             if (brIdx !== -1) {
               summary = description.slice(brIdx + 5).trim();
             } else if (description.startsWith('来源:')) {
-              const lines = description.split(/[\n\r]+/);
+              const lines = description.split(/[\\n\\r]+/);
               summary = lines.slice(1).join(' ').trim();
             } else {
               summary = description;

@@ -321,7 +321,7 @@ def extract_date_from_article(html):
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, 'html.parser')
 
-        # 1. 标准 meta 标签
+        # 1. 标准 meta 标签（常带完整时间戳）
         meta_selectors = [
             ('meta[property="article:published_time"]', 'content'),
             ('meta[name="pubdate"]', 'content'),
@@ -350,8 +350,15 @@ def extract_date_from_article(html):
                 if result:
                     return result
 
-        # 3. 全文正则扫描（取最早出现的完整日期）
+        # 3. 全文正则扫描（优先匹配带时间的完整格式）
         text = soup.get_text()
+        # 先尝试找带时间的
+        dt_matches = re.findall(r'(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}\s+\d{2}:\d{2}(?::\d{2})?)', text)
+        for m in dt_matches:
+            result = parse_date(m)
+            if result:
+                return result
+        # 再只找日期
         matches = re.findall(r'(\d{4}[-/年]\d{1,2}[-/月]\d{1,2})', text)
         for m in matches:
             result = parse_date(m)
@@ -378,8 +385,13 @@ def extract_date_from_list_item(li, date_selector):
         if result:
             return result
 
-    # 3. 正则扫描整个 li 文本
+    # 3. 正则扫描整个 li 文本（优先带时间）
     text = li.get_text()
+    dt_match = re.search(r'(\d{4}[-/年]\d{1,2}[-/月]\d{1,2}\s+\d{2}:\d{2}(?::\d{2})?)', text)
+    if dt_match:
+        result = parse_date(dt_match.group(1))
+        if result:
+            return result
     match = re.search(r'(\d{4}[-/年]\d{1,2}[-/月]\d{1,2})', text)
     if match:
         result = parse_date(match.group(1))
@@ -547,14 +559,29 @@ def parse_search_api(source_key, source_config, session):
 
 
 def parse_date(date_str):
-    """解析各种日期格式"""
+    """解析各种日期/时间格式"""
     if not date_str:
         return None
 
     date_str = date_str.strip()
 
-    # 固定格式（含点号分隔，如 nda.gov.cn 的 2026.04.10）
-    formats = ['%Y-%m-%d', '%Y/%m/%d', '%Y.%m.%d', '%Y年%m月%d日']
+    # ISO 8601 格式（如 2026-04-14T10:30:00+08:00）
+    iso_match = re.search(r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:[+-]\d{2}:\d{2}|Z)?', date_str)
+    if iso_match:
+        try:
+            dt = datetime.fromisoformat(iso_match.group(1))
+            return dt.isoformat()
+        except:
+            pass
+
+    # 固定格式：先尝试带时间的
+    formats = [
+        '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M',
+        '%Y/%m/%d %H:%M:%S', '%Y/%m/%d %H:%M',
+        '%Y.%m.%d %H:%M:%S', '%Y.%m.%d %H:%M',
+        '%Y年%m月%d日 %H:%M:%S', '%Y年%m月%d日 %H:%M',
+        '%Y-%m-%d', '%Y/%m/%d', '%Y.%m.%d', '%Y年%m月%d日'
+    ]
     for fmt in formats:
         try:
             dt = datetime.strptime(date_str, fmt)
@@ -562,7 +589,19 @@ def parse_date(date_str):
         except:
             continue
 
-    # 通用正则：支持 - / . 三种分隔符
+    # 通用正则：带时间
+    dt_match = re.search(r'(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})\s+(\d{2}):(\d{2})(?::(\d{2}))?', date_str)
+    if dt_match:
+        try:
+            groups = [int(dt_match.group(i)) for i in range(1, 7) if dt_match.group(i)]
+            if len(groups) == 5:
+                return datetime(*groups).isoformat()
+            elif len(groups) == 6:
+                return datetime(*groups).isoformat()
+        except:
+            pass
+
+    # 通用正则：仅日期
     match = re.search(r'(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})', date_str)
     if match:
         try:

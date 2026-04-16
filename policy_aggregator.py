@@ -321,20 +321,19 @@ def extract_date_from_article(html):
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, 'html.parser')
 
-        # 1. 标准 meta 标签（常带完整时间戳）
-        meta_selectors = [
-            ('meta[property="article:published_time"]', 'content'),
-            ('meta[name="pubdate"]', 'content'),
-            ('meta[name="publishdate"]', 'content'),
-            ('meta[name="date"]', 'content'),
-            ('meta[itemprop="datePublished"]', 'content'),
-        ]
-        for selector, attr in meta_selectors:
-            tag = soup.select_one(selector)
-            if tag and tag.get(attr):
-                result = parse_date(tag[attr])
-                if result:
-                    return result
+        # 1. 标准 meta 标签（常带完整时间戳，大小写不敏感）
+        for meta in soup.find_all("meta"):
+            meta_property = (meta.get("property") or "").lower()
+            meta_name = (meta.get("name") or "").lower()
+            meta_itemprop = (meta.get("itemprop") or "").lower()
+            if meta_property in {"article:published_time", "pubdate", "publishdate", "date"} or \
+               meta_name in {"pubdate", "publishdate", "date"} or \
+               meta_itemprop in {"datepublished"}:
+                content = meta.get("content")
+                if content:
+                    result = parse_date(content)
+                    if result:
+                        return result
 
         # 2. 政府网站常见日期容器
         date_selectors = [
